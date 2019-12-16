@@ -2,7 +2,7 @@
 //  main.m
 //  TSLongImage
 //
-//  Created by YYInc on 2019/11/15.
+//  Created by caoxuerui on 2019/11/15.
 //  Copyright © 2019 caoxuerui. All rights reserved.
 //
 
