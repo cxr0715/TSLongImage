@@ -67,14 +67,21 @@
                 UInt8 *resultTmp;// 记录结果图像该行像素值
                 BOOL outSideBreakFlag = NO;// 如果不同就中断遍历的flag
                 for (j = 0; j < width; j++) {
-                    currentTmp = currentBuffer + i * bytesPerRow + width * 4;
-                    resultTmp = resultBuffer + i * bytesPerRow + width * 4;
+                    currentTmp = currentBuffer + i * bytesPerRow + j * 4;
+                    resultTmp = resultBuffer + i * bytesPerRow + j * 4;
                     if (*currentTmp ^ *resultTmp ^ *(currentTmp + 1) ^ *(resultTmp + 1) ^ *(currentTmp + 2) ^ *(resultTmp + 2) ^ *(currentTmp + 3) ^ *(resultTmp + 3)) {
-                        // 异或，如果不相同，则记录下该行的行数
-                        diffCurrentStart = i;
-                        diffResultStart = i;
-                        outSideBreakFlag = YES;
-                        break;
+                        if (
+                            abs((int)*currentTmp - (int)*resultTmp) +
+                            abs((int)*(currentTmp + 1) - (int)*(resultTmp + 1)) +
+                            abs((int)*(currentTmp + 2) - (int)*(resultTmp + 2)) +
+                            abs((int)*(currentTmp + 3) - (int)*(resultTmp + 3)) >= 20
+                           ) {
+                            // 异或，如果不相同，且它们RGBA四分量的绝对值之和大于20，则认为不同记录下该行的行数
+                            diffCurrentStart = i;
+                            diffResultStart = i;
+                            outSideBreakFlag = YES;
+                            break;
+                        }
                     }
                 }
                 if (outSideBreakFlag == YES) {
@@ -88,14 +95,21 @@
                 UInt8 *resultTmp;// 记录结果图像该行像素值
                 BOOL outSideBreakFlag = NO;
                 for (j = 0; j < width; j++) {
-                    currentTmp = currentBuffer + i * bytesPerRow + width * 4;
-                    resultTmp = resultBuffer + diffResultEnd * bytesPerRow + width * 4;
+                    currentTmp = currentBuffer + i * bytesPerRow + j * 4;
+                    resultTmp = resultBuffer + diffResultEnd * bytesPerRow + j * 4;
                     if (*currentTmp ^ *resultTmp ^ *(currentTmp + 1) ^ *(resultTmp + 1) ^ *(currentTmp + 2) ^ *(resultTmp + 2) ^ *(currentTmp + 3) ^ *(resultTmp + 3)) {
-                        // 异或，如果不相同，则记录下该行的行数
-                        diffCurrentEnd = i;
-                        diffResultEnd = diffResultEnd;
-                        outSideBreakFlag = YES;
-                        break;
+                        if (
+                            abs((int)*currentTmp - (int)*resultTmp) +
+                            abs((int)*(currentTmp + 1) - (int)*(resultTmp + 1)) +
+                            abs((int)*(currentTmp + 2) - (int)*(resultTmp + 2)) +
+                            abs((int)*(currentTmp + 3) - (int)*(resultTmp + 3)) >= 20
+                           ) {
+                            // 异或，如果不相同，且它们RGBA四分量的绝对值之和大于20，则认为不同记录下该行的行数
+                            diffCurrentEnd = i;
+                            diffResultEnd = diffResultEnd;
+                            outSideBreakFlag = YES;
+                            break;
+                        }
                     }
                 }
                 if (outSideBreakFlag) {
@@ -117,20 +131,22 @@
                 NSUInteger outSideBreakFlag = 0;// 0：初始化状态，1：异步率大于5%，2：同步率大于95%，3：已经有相同行的前提下，偶然遇到一个不相同行
                 NSUInteger synchronize = 0;// 同步率大于95%即认为该行相同
                 NSUInteger asynchronize = 0;// 异步率大于5%则停止遍历该行
-                NSUInteger unusual = 0;// 用来记录异常值的临时变量，如果已经有匹配成功的行，但是有可能偶尔遇到一个匹配不成功的行，那么就+1，直到其值大于searchLength的10%才认为不相等
                 for (j = 0; j < width; j++) {
-                    currentTmp = currentBuffer + i * bytesPerRow + width * 4;
-                    resultTmp = resultBuffer + searchResultStart * bytesPerRow + width * 4;
+                    currentTmp = currentBuffer + i * bytesPerRow + j * 4;
+                    resultTmp = resultBuffer + searchResultStart * bytesPerRow + j * 4;
                     if (*currentTmp ^ *resultTmp ^ *(currentTmp + 1) ^ *(resultTmp + 1) ^ *(currentTmp + 2) ^ *(resultTmp + 2) ^ *(currentTmp + 3) ^ *(resultTmp + 3)) {
-                        // 异或，如果不相同，异步率+1
-                        asynchronize++;
-                        if (asynchronize > width * 5 / 100) {
-                            outSideBreakFlag = 1;
-                            if (searchResultStart != diffResultEnd - searchLength) {
-                                // searchResultStart不等于初始值，说明其已经有相同的行，但是有可能偶尔遇到一个不相同的行，在这里做一个记录
-                                outSideBreakFlag = 3;
+                        if (
+                              abs((int)*currentTmp - (int)*resultTmp) +
+                              abs((int)*(currentTmp + 1) - (int)*(resultTmp + 1)) +
+                              abs((int)*(currentTmp + 2) - (int)*(resultTmp + 2)) +
+                              abs((int)*(currentTmp + 3) - (int)*(resultTmp + 3)) >= 20
+                        ) {
+                            // 异或，如果不相同，且它们RGBA四分量的绝对值之和大于20，则认为该行不同，异步率+1
+                            asynchronize++;
+                            if (asynchronize > width * 5 / 100) {
+                                outSideBreakFlag = 1;
+                                break;
                             }
-                            break;
                         }
                     } else {
                         // 如果相同，则同步率+1
@@ -154,28 +170,12 @@
                         searchCurrentEnd = i;// 记录结束的行数
                         break;
                     }
-                } else if (outSideBreakFlag == 3) {
-                    // 如果异常行连续值大于了searchLength的10%才认为不相等
-                    unusual++;
-                    if (unusual > searchLength * 10 / 100) {
-                        // 该行不同
-                        searchResultStart = diffResultEnd - searchLength;// 结果图片的查找开始行重置
-                        searchSamePercent = 0;// 重合率重置
-                    } else {
-                        // 该行相同
-                        searchSamePercent++;// 重合率+1
-                        searchResultStart++;// 结果图片的查找行+1
-                        if (searchSamePercent >= searchLength) {
-                            searchCurrentEnd = i;// 记录结束的行数
-                            break;
-                        }
-                    }
                 }
             }
             
             imageAddCount = imageAddCount + diffCurrentEnd - searchCurrentEnd;// 每次遍历多出来的行数
             CFMutableDataRef resultMutableDataRef = CFDataCreateMutableCopy(CFAllocatorGetDefault(), 0, resultCFData);
-            UInt8 *startByte = currentBuffer + searchCurrentEnd * bytesPerRow + width * 4;// 新加上去的图片buffer的首地址
+            UInt8 *startByte = currentBuffer + searchCurrentEnd * bytesPerRow;// 新加上去的图片buffer的首地址
             CFRange deleteRange = CFRangeMake(diffResultEnd * bytesPerRow, CFDataGetLength(resultCFData) - diffResultEnd * bytesPerRow);// 需要替换的结果图片的尾部
             CFDataReplaceBytes(resultMutableDataRef, deleteRange, startByte, (height - searchCurrentEnd) * bytesPerRow);// 替换结果图片尾部为目标图片
             resultImageData = (__bridge_transfer NSData *)resultMutableDataRef;
